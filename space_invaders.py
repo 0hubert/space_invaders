@@ -19,10 +19,13 @@ class SpaceInvaders:
         self.PLAYER_SIZE = 50
         self.ALIEN_SIZE = 40
         self.EXPLOSION_DURATION = 20  # milliseconds
+        self.ZAP_WIDTH = 8  # Narrow width for alien bullets
+        self.ZAP_HEIGHT = 20  # Taller height for alien bullets
         
         # Load and resize images
         self.player_image = self.load_and_resize_image("si_player.png", (self.PLAYER_SIZE, self.PLAYER_SIZE))
         self.explosion_image = self.load_and_resize_image("si_explode.png", (self.ALIEN_SIZE, self.ALIEN_SIZE))
+        self.zap_image = self.load_and_resize_image("si_zap.png", (self.ZAP_WIDTH, self.ZAP_HEIGHT))
         self.alien_images = [
             self.load_and_resize_image("si_alien1.png", (self.ALIEN_SIZE, self.ALIEN_SIZE)),
             self.load_and_resize_image("si_alien2.png", (self.ALIEN_SIZE, self.ALIEN_SIZE)),
@@ -181,11 +184,12 @@ class SpaceInvaders:
         if self.aliens:
             shooter = random.choice(self.aliens)
             coords = self.canvas.coords(shooter)
-            bullet = self.canvas.create_rectangle(
-                coords[0] + 20, coords[1] + 40,  # Bottom center of alien
-                coords[0] + 20, coords[1] + 50,
-                fill='white',
-                outline='white'
+            # Create zap at the bottom center of the alien
+            bullet = self.canvas.create_image(
+                coords[0] + (self.ALIEN_SIZE - self.ZAP_WIDTH)//2,  # Center the narrow zap
+                coords[1] + self.ALIEN_SIZE - 5,  # Slightly overlap with alien
+                image=self.zap_image,
+                anchor='nw'
             )
             self.alien_bullets.append(bullet)
     
@@ -299,15 +303,37 @@ class SpaceInvaders:
     
     def check_overlap(self, coords1, coords2, target_size=None):
         # For collision detection between rectangles or images
-        obj1_left = coords1[0]
-        obj1_right = coords1[2] if len(coords1) > 2 else coords1[0] + (target_size or self.ALIEN_SIZE)
-        obj1_top = coords1[1]
-        obj1_bottom = coords1[3] if len(coords1) > 2 else coords1[1] + (target_size or self.ALIEN_SIZE)
-        
-        obj2_left = coords2[0]
-        obj2_right = coords2[2] if len(coords2) > 2 else coords2[0] + (target_size or self.ALIEN_SIZE)
-        obj2_top = coords2[1]
-        obj2_bottom = coords2[3] if len(coords2) > 2 else coords2[1] + (target_size or self.ALIEN_SIZE)
+        # Handle different types of objects (bullets, zaps, aliens, player)
+        if len(coords1) > 2:  # Rectangle (player bullet)
+            obj1_left = coords1[0]
+            obj1_right = coords1[2]
+            obj1_top = coords1[1]
+            obj1_bottom = coords1[3]
+        else:  # Image (zap, alien, or player)
+            obj1_left = coords1[0]
+            obj1_top = coords1[1]
+            if target_size:  # For player or alien
+                obj1_right = coords1[0] + target_size
+                obj1_bottom = coords1[1] + target_size
+            else:  # For zap
+                obj1_right = coords1[0] + self.ZAP_WIDTH
+                obj1_bottom = coords1[1] + self.ZAP_HEIGHT
+
+        # Similar handling for the second object
+        if len(coords2) > 2:  # Rectangle (barrier)
+            obj2_left = coords2[0]
+            obj2_right = coords2[2]
+            obj2_top = coords2[1]
+            obj2_bottom = coords2[3]
+        else:  # Image (alien or player)
+            obj2_left = coords2[0]
+            obj2_top = coords2[1]
+            if target_size:  # For player or alien
+                obj2_right = coords2[0] + target_size
+                obj2_bottom = coords2[1] + target_size
+            else:  # This case shouldn't occur but handle it anyway
+                obj2_right = coords2[0] + self.ALIEN_SIZE
+                obj2_bottom = coords2[1] + self.ALIEN_SIZE
         
         return not (obj1_right < obj2_left or
                    obj1_left > obj2_right or
