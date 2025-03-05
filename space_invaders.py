@@ -1,4 +1,5 @@
 import tkinter as tk
+from PIL import Image, ImageTk
 import random
 import time
 
@@ -15,6 +16,20 @@ class SpaceInvaders:
         self.ALIEN_SPEED = 2
         self.ALIEN_BULLET_SPEED = 4
         self.ALIEN_SHOOT_INTERVAL = 5  # seconds
+        self.PLAYER_SIZE = 50
+        self.ALIEN_SIZE = 40
+        self.EXPLOSION_DURATION = 20  # milliseconds
+        
+        # Load and resize images
+        self.player_image = self.load_and_resize_image("si_player.png", (self.PLAYER_SIZE, self.PLAYER_SIZE))
+        self.explosion_image = self.load_and_resize_image("si_explode.png", (self.ALIEN_SIZE, self.ALIEN_SIZE))
+        self.alien_images = [
+            self.load_and_resize_image("si_alien1.png", (self.ALIEN_SIZE, self.ALIEN_SIZE)),
+            self.load_and_resize_image("si_alien2.png", (self.ALIEN_SIZE, self.ALIEN_SIZE)),
+            self.load_and_resize_image("si_alien3.png", (self.ALIEN_SIZE, self.ALIEN_SIZE)),
+            self.load_and_resize_image("si_alien4.png", (self.ALIEN_SIZE, self.ALIEN_SIZE)),
+            self.load_and_resize_image("si_alien5.png", (self.ALIEN_SIZE, self.ALIEN_SIZE))
+        ]
         
         # Create canvas
         self.canvas = tk.Canvas(root, width=self.WIDTH, height=self.HEIGHT, bg='black')
@@ -23,9 +38,10 @@ class SpaceInvaders:
         # Game state
         self.score = 0
         self.game_over = False
-        self.aliens_moving_right = True  # Track alien movement direction
+        self.aliens_moving_right = True
         
         # Create game objects
+        self.score_display = self.create_score_display()
         self.player = self.create_player()
         self.aliens = self.create_aliens()
         self.barriers = self.create_barriers()
@@ -41,30 +57,38 @@ class SpaceInvaders:
         self.last_alien_shot = time.time()
         self.update()
     
-    def create_player(self):
-        # Create player ship (triangle shape)
-        x = self.WIDTH // 2
-        y = self.HEIGHT - 50
-        return self.canvas.create_polygon(
-            x, y,
-            x - 20, y + 40,
-            x + 20, y + 40,
-            fill='green'
+    def load_and_resize_image(self, filename, size):
+        image = Image.open(filename)
+        image = image.resize(size, Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(image)
+    
+    def create_score_display(self):
+        return self.canvas.create_text(
+            10, 10,
+            text="Score: 0",
+            fill='white',
+            font=('Arial', 20),
+            anchor='nw'
         )
+    
+    def update_score_display(self):
+        self.canvas.itemconfig(self.score_display, text=f"Score: {self.score}")
+    
+    def create_player(self):
+        x = self.WIDTH // 2 - 25  # Adjust for image size
+        y = self.HEIGHT - 100
+        return self.canvas.create_image(x, y, image=self.player_image, anchor='nw')
     
     def create_aliens(self):
         aliens = []
         rows = 5
         cols = 8
         for row in range(rows):
+            alien_image = self.alien_images[row % len(self.alien_images)]
             for col in range(cols):
                 x = 100 + col * 80
                 y = 50 + row * 60
-                alien = self.canvas.create_oval(
-                    x, y,
-                    x + 40, y + 40,
-                    fill='red'
-                )
+                alien = self.canvas.create_image(x, y, image=alien_image, anchor='nw')
                 aliens.append(alien)
         return aliens
     
@@ -83,25 +107,25 @@ class SpaceInvaders:
     
     def move_player_left(self, event):
         if not self.game_over:
-            self.canvas.move(self.player, -self.PLAYER_SPEED, 0)
+            coords = self.canvas.coords(self.player)
+            if coords[0] > 0:  # Check left boundary
+                self.canvas.move(self.player, -self.PLAYER_SPEED, 0)
     
     def move_player_right(self, event):
         if not self.game_over:
-            self.canvas.move(self.player, self.PLAYER_SPEED, 0)
+            coords = self.canvas.coords(self.player)
+            if coords[0] < self.WIDTH - 50:  # Check right boundary
+                self.canvas.move(self.player, self.PLAYER_SPEED, 0)
     
     def shoot(self, event):
         if not self.game_over:
-            # Get the current position of the player (triangle has 6 coordinates)
             coords = self.canvas.coords(self.player)
-            # Get the top point of the triangle (first two coordinates)
-            x = coords[0]
-            y = coords[1]
             # Create bullet at the top center of the player
             bullet = self.canvas.create_rectangle(
-                x, y,
-                x, y - 10,
+                coords[0] + 25, coords[1],  # Center of player
+                coords[0] + 25, coords[1] - 10,
                 fill='yellow',
-                outline='yellow'  # Add yellow outline
+                outline='yellow'
             )
             self.player_bullets.append(bullet)
     
@@ -118,11 +142,12 @@ class SpaceInvaders:
             if self.aliens:
                 # Check if any alien has reached the edge
                 for alien in self.aliens:
-                    x1, y1, x2, y2 = self.canvas.coords(alien)
-                    if x2 > self.WIDTH - 10:
+                    coords = self.canvas.coords(alien)
+                    x = coords[0]  # x coordinate
+                    if x + 40 > self.WIDTH - 10:  # Add alien width for right boundary
                         self.aliens_moving_right = False
                         break
-                    elif x1 < 10:
+                    elif x < 10:
                         self.aliens_moving_right = True
                         break
                 
@@ -154,82 +179,140 @@ class SpaceInvaders:
     
     def alien_shoot(self):
         if self.aliens:
-            # Randomly select an alien to shoot
             shooter = random.choice(self.aliens)
-            x1, y1, x2, y2 = self.canvas.coords(shooter)
+            coords = self.canvas.coords(shooter)
             bullet = self.canvas.create_rectangle(
-                x1 + 20, y2,
-                x1 + 20, y2 + 10,
+                coords[0] + 20, coords[1] + 40,  # Bottom center of alien
+                coords[0] + 20, coords[1] + 50,
                 fill='white',
-                outline='white'  # Add white outline
+                outline='white'
             )
             self.alien_bullets.append(bullet)
     
+    def show_explosion(self, x, y, alien_to_remove):
+        # Create explosion at alien's position
+        explosion = self.canvas.create_image(x, y, image=self.explosion_image, anchor='nw')
+        # Schedule cleanup
+        self.root.after(self.EXPLOSION_DURATION, lambda: self.remove_explosion(explosion, alien_to_remove))
+    
+    def remove_explosion(self, explosion, alien):
+        self.canvas.delete(explosion)  # Remove explosion image
+        self.canvas.delete(alien)      # Remove the alien
+        self.aliens.remove(alien)      # Remove from list
+    
     def check_collisions(self):
-        # Check player bullets hitting aliens
+        # Check player bullets hitting aliens or barriers
         for bullet in self.player_bullets[:]:
             bullet_coords = self.canvas.coords(bullet)
+            
+            # Check collision with aliens
             for alien in self.aliens[:]:
                 alien_coords = self.canvas.coords(alien)
-                if self.check_overlap(bullet_coords, alien_coords):
+                if self.check_overlap(bullet_coords, alien_coords, self.ALIEN_SIZE):
                     self.canvas.delete(bullet)
-                    self.canvas.delete(alien)
                     self.player_bullets.remove(bullet)
-                    self.aliens.remove(alien)
+                    # Show explosion instead of immediately removing alien
+                    self.show_explosion(alien_coords[0], alien_coords[1], alien)
                     self.score += 100
+                    self.update_score_display()
+                    break
+            
+            # Check collision with barriers
+            for barrier in self.barriers[:]:
+                barrier_coords = self.canvas.coords(barrier)
+                if self.check_overlap(bullet_coords, barrier_coords):
+                    self.canvas.delete(bullet)
+                    self.player_bullets.remove(bullet)
+                    # Damage the barrier (make it smaller or remove if too damaged)
+                    self.damage_barrier(barrier)
                     break
         
-        # Check alien bullets hitting player
-        player_coords = self.canvas.coords(self.player)
+        # Check alien bullets hitting player or barriers
         for bullet in self.alien_bullets[:]:
             bullet_coords = self.canvas.coords(bullet)
-            # Check if bullet is within the player's triangle bounds
-            if self.check_overlap(bullet_coords, player_coords):
-                self.game_over = True
-                # Clear all game objects
-                for bullet in self.player_bullets:
-                    self.canvas.delete(bullet)
-                for bullet in self.alien_bullets:
-                    self.canvas.delete(bullet)
-                for alien in self.aliens:
-                    self.canvas.delete(alien)
-                for barrier in self.barriers:
-                    self.canvas.delete(barrier)
-                # Show game over message
-                self.canvas.create_text(
-                    self.WIDTH/2, self.HEIGHT/2,
-                    text="GAME OVER!",
-                    fill='white',
-                    font=('Arial', 48)
-                )
-                # Show final score
-                self.canvas.create_text(
-                    self.WIDTH/2, self.HEIGHT/2 + 50,
-                    text=f"Score: {self.score}",
-                    fill='white',
-                    font=('Arial', 24)
-                )
-                break
-    
-    def check_overlap(self, coords1, coords2):
-        # For rectangle (bullet) and polygon (player) collision
-        if len(coords2) == 6:  # Player is a triangle
-            # Get the bounding box of the player's triangle
-            min_x = min(coords2[0], coords2[2], coords2[4])
-            max_x = max(coords2[0], coords2[2], coords2[4])
-            min_y = min(coords2[1], coords2[3], coords2[5])
-            max_y = max(coords2[1], coords2[3], coords2[5])
             
-            # Check if bullet is within the bounding box
-            return not (coords1[2] < min_x or
-                       coords1[0] > max_x or
-                       coords1[3] < min_y or
-                       coords1[1] > max_y)
-        else:  # Both are rectangles
-            return not (coords1[2] < coords2[0] or
-                       coords1[0] > coords2[2] or
-                       coords1[3] < coords2[1] or
-                       coords1[1] > coords2[3])
+            # Check collision with player
+            player_coords = self.canvas.coords(self.player)
+            if self.check_overlap(bullet_coords, player_coords, self.PLAYER_SIZE):
+                self.end_game("GAME OVER!")
+                break
+            
+            # Check collision with barriers
+            for barrier in self.barriers[:]:
+                barrier_coords = self.canvas.coords(barrier)
+                if self.check_overlap(bullet_coords, barrier_coords):
+                    self.canvas.delete(bullet)
+                    self.alien_bullets.remove(bullet)
+                    self.damage_barrier(barrier)
+                    break
+        
+        self.check_win()
+    
+    def damage_barrier(self, barrier):
+        coords = self.canvas.coords(barrier)
+        width = coords[2] - coords[0]
+        if width > 20:  # If barrier is still big enough to be damaged
+            # Make the barrier smaller
+            new_width = width - 10
+            self.canvas.coords(barrier,
+                             coords[0] + 5, coords[1],
+                             coords[0] + new_width - 5, coords[3])
+        else:
+            # Remove the barrier if it's too damaged
+            self.canvas.delete(barrier)
+            self.barriers.remove(barrier)
+    
+    def end_game(self, message):
+        self.game_over = True
+        # Clear all game objects
+        for obj in self.player_bullets + self.alien_bullets + self.aliens + self.barriers:
+            self.canvas.delete(obj)
+        # Show game over message
+        self.canvas.create_text(
+            self.WIDTH/2, self.HEIGHT/2,
+            text=message,
+            fill='white',
+            font=('Arial', 48)
+        )
+        self.canvas.create_text(
+            self.WIDTH/2, self.HEIGHT/2 + 50,
+            text=f"Final Score: {self.score}",
+            fill='white',
+            font=('Arial', 24)
+        )
+    
+    def check_win(self):
+        if not self.aliens and not self.game_over:
+            self.game_over = True
+            self.canvas.create_text(
+                self.WIDTH/2, self.HEIGHT/2,
+                text="YOU WIN!",
+                fill='white',
+                font=('Arial', 48)
+            )
+            self.canvas.create_text(
+                self.WIDTH/2, self.HEIGHT/2 + 50,
+                text=f"Final Score: {self.score}",
+                fill='white',
+                font=('Arial', 24)
+            )
+    
+    def check_overlap(self, coords1, coords2, target_size=None):
+        # For collision detection between rectangles or images
+        obj1_left = coords1[0]
+        obj1_right = coords1[2] if len(coords1) > 2 else coords1[0] + (target_size or self.ALIEN_SIZE)
+        obj1_top = coords1[1]
+        obj1_bottom = coords1[3] if len(coords1) > 2 else coords1[1] + (target_size or self.ALIEN_SIZE)
+        
+        obj2_left = coords2[0]
+        obj2_right = coords2[2] if len(coords2) > 2 else coords2[0] + (target_size or self.ALIEN_SIZE)
+        obj2_top = coords2[1]
+        obj2_bottom = coords2[3] if len(coords2) > 2 else coords2[1] + (target_size or self.ALIEN_SIZE)
+        
+        return not (obj1_right < obj2_left or
+                   obj1_left > obj2_right or
+                   obj1_bottom < obj2_top or
+                   obj1_top > obj2_bottom)
 
 if __name__ == "__main__":
     root = tk.Tk()
